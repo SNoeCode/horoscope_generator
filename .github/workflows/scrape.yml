@@ -23,7 +23,7 @@ jobs:
 
       - name: Run scraper
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python update_horoscope.py
 
       - name: Push horoscope.json to github.io repo

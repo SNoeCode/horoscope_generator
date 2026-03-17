@@ -2,8 +2,8 @@ name: Scrape Daily Horoscopes
 
 on:
   schedule:
-    - cron: '0 6 * * *'  # Runs every day at 6am UTC
-  workflow_dispatch:       # Allows manual trigger from GitHub UI
+    - cron: '0 6 * * *'
+  workflow_dispatch:
 
 jobs:
   scrape:
@@ -22,6 +22,8 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run scraper
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: python update_horoscope.py
 
       - name: Push horoscope.json to github.io repo

@@ -1,107 +1,95 @@
 """
-Cafe Astrology Daily Horoscope Scraper
-Scrapes daily horoscopes for all zodiac signs from cafeastrology.com
+HuggingFace Daily Horoscope Generator
+Generates daily horoscopes for all zodiac signs using the HuggingFace Inference API
 """
 
 import requests
-from bs4 import BeautifulSoup
+import os
 from datetime import datetime
 from typing import Dict, Optional
 import time
-import re
 
 
-class HoroscopeScraper:
-    """Scraper for Cafe Astrology daily horoscopes"""
+class HoroscopeGenerator:
 
-    BASE_URL = "https://cafeastrology.com"
+    MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.3"
+    API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3"
 
-    DAILY_URLS = {
-        'aries': '/ariesdailyhoroscope.html',
-        'taurus': '/taurusdailyhoroscope.html',
-        'gemini': '/geminidailyhoroscope.html',
-        'cancer': '/cancerdailyhoroscope.html',
-        'leo': '/leodailyhoroscope.html',
-        'virgo': '/virgodailyhoroscope.html',
-        'libra': '/libradailyhoroscope.html',
-        'scorpio': '/scorpiodailyhoroscope.html',
-        'sagittarius': '/sagittariusdailyhoroscope.html',
-        'capricorn': '/capricorndailyhoroscope.html',
-        'aquarius': '/aquariusdailyhoroscope.html',
-        'pisces': '/piscesdailyhoroscope.html'
+    SIGNS = [
+        'aries', 'taurus', 'gemini', 'cancer', 'leo', 'virgo',
+        'libra', 'scorpio', 'sagittarius', 'capricorn', 'aquarius', 'pisces'
+    ]
+
+    SIGN_TRAITS = {
+        'aries': 'bold, energetic, and pioneering',
+        'taurus': 'grounded, patient, and determined',
+        'gemini': 'curious, adaptable, and communicative',
+        'cancer': 'intuitive, nurturing, and emotional',
+        'leo': 'confident, creative, and generous',
+        'virgo': 'analytical, practical, and detail-oriented',
+        'libra': 'balanced, diplomatic, and charming',
+        'scorpio': 'intense, passionate, and transformative',
+        'sagittarius': 'adventurous, optimistic, and philosophical',
+        'capricorn': 'ambitious, disciplined, and persistent',
+        'aquarius': 'innovative, independent, and humanitarian',
+        'pisces': 'dreamy, empathetic, and artistic'
     }
 
-    def __init__(self, delay: float = 1.0):
-        self.delay = delay
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        })
+    def __init__(self):
+        self.token = os.environ.get('HF_TOKEN', '')
+        self.headers = {
+            'Authorization': 'Bearer ' + self.token,
+            'Content-Type': 'application/json'
+        }
 
-    def fetch_page(self, url: str) -> Optional[BeautifulSoup]:
-        try:
-            response = self.session.get(url, timeout=10)
-            response.raise_for_status()
-            return BeautifulSoup(response.content, 'html.parser')
-        except requests.RequestException as e:
-            print(f"Error fetching {url}: {e}")
+    def build_prompt(self, sign):
+        today = datetime.now().strftime('%B %d, %Y')
+        traits = self.SIGN_TRAITS.get(sign, '')
+        prompt = (
+            "[INST] Write a daily horoscope for " + sign.capitalize() + " for " + today + ". "
+            + sign.capitalize() + " is " + traits + ". "
+            "Write 3-4 sentences, mystical and encouraging tone, "
+            "covering love, career, and personal growth. "
+            "Return only the horoscope paragraph, no headings or labels. [/INST]"
+        )
+        return prompt
+
+    def generate_horoscope(self, sign):
+        if sign not in self.SIGNS:
+            print("Invalid sign: " + sign)
             return None
 
-    def extract_daily_horoscope(self, soup: BeautifulSoup, sign: str) -> Optional[Dict]:
+        prompt = self.build_prompt(sign)
+        payload = {
+            'inputs': prompt,
+            'parameters': {
+                'max_new_tokens': 200,
+                'temperature': 0.85,
+                'do_sample': True,
+                'return_full_text': False
+            }
+        }
+
         try:
-            date_text = None
-            for elem in soup.find_all(['h4', 'h3', 'p']):
-                text = elem.get_text(strip=True)
-                if re.search(r'[A-Z][a-z]+ \d{1,2}, \d{4}', text):
-                    date_text = text
-                    break
+            response = requests.post(self.API_URL, headers=self.headers, json=payload, timeout=60)
+            response.raise_for_status()
+            result = response.json()
 
-            horoscope_text = None
-            paragraphs = soup.find_all('p')
-            for p in paragraphs:
-                text = p.get_text(strip=True)
-                if len(text) > 100 and ('dear' in text.lower() or 'moon' in text.lower()):
-                    horoscope_text = text
-                    break
+            if isinstance(result, list) and len(result) > 0:
+                text = result[0].get('generated_text', '').strip()
+            else:
+                text = str(result).strip()
 
-            if not horoscope_text:
-                for p in paragraphs:
-                    text = p.get_text(strip=True)
-                    if len(text) > 200:
-                        horoscope_text = text
-                        break
-
-            ratings = {}
-            ratings_text = soup.find(string=re.compile(r'Creativity:.*Love:.*Business:'))
-            if ratings_text:
-                for label in ['creativity', 'love', 'business']:
-                    match = re.search(rf'{label.capitalize()}:\s*(\w+)', ratings_text, re.I)
-                    if match:
-                        ratings[label] = match.group(1)
+            # wait 2 seconds between calls so we dont hit rate limits
+            time.sleep(2)
 
             return {
-                'date': date_text or datetime.now().strftime('%B %d, %Y'),
-                'summary': horoscope_text or "Horoscope text not found",
-                'ratings': ratings,
+                'date': datetime.now().strftime('%B %d, %Y'),
+                'summary': text,
+                'ratings': {},
                 'scraped_at': datetime.now().isoformat()
             }
 
-        except Exception as e:
-            print(f"Error extracting horoscope for {sign}: {e}")
+        except requests.RequestException as e:
+            print("Error generating horoscope for " + sign + ": " + str(e))
             return None
-
-    def scrape_sign(self, sign: str) -> Optional[Dict]:
-        if sign not in self.DAILY_URLS:
-            print(f"Invalid sign: {sign}")
-            return None
-
-        url = self.BASE_URL + self.DAILY_URLS[sign]
-        print(f"  Scraping {sign.capitalize()}...")
-
-        soup = self.fetch_page(url)
-        if not soup:
-            return None
-
-        horoscope = self.extract_daily_horoscope(soup, sign)
-        time.sleep(self.delay)
-        return horoscope

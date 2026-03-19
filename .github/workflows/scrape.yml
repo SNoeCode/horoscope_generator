@@ -32,21 +32,10 @@ jobs:
         run: |
           git clone https://x-access-token:${GH_PAT}@github.com/SNoeCode/SNoeCode.github.io.git gh-pages
 
-          # Rotate current horoscope.json → horoscope_yesterday.json with correct date
           cp gh-pages/horoscope.json gh-pages/horoscope_yesterday.json
           YESTERDAY=$(date -d "yesterday" "+%B %d, %Y")
-          python3 -c "
-import json, sys
-path = 'gh-pages/horoscope_yesterday.json'
-with open(path) as f:
-    data = json.load(f)
-for sign in data:
-    data[sign]['date'] = sys.argv[1]
-with open(path, 'w') as f:
-    json.dump(data, f, indent=2)
-" "$YESTERDAY"
+          sed -i "s/\"date\": \"[^\"]*\"/\"date\": \"$YESTERDAY\"/g" gh-pages/horoscope_yesterday.json
 
-          # Copy today's freshly generated horoscopes
           cp horoscope.json gh-pages/horoscope.json
 
           cd gh-pages
